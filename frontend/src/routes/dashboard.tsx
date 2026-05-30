@@ -23,64 +23,50 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { loadProject, type ProjectDraft } from "@/lib/project-cache";
+import { getAuditResults, type AuditResults, type PSScore } from "@/lib/api/analysisApi";
+import { getProject } from "@/lib/api/projectApi";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Compliance Dashboard — BridgeHydro" }] }),
   component: DashboardPage,
 });
 
-type PS = {
-  code: string;
-  title: string;
-  status: "COMPLIANT" | "WARNING" | "E-FLOW GAP" | "MAJOR BREACH" | "PENDING";
-};
-
-const standards: PS[] = [
-  { code: "PS1", title: "Assessment & Mgmt", status: "COMPLIANT" },
-  { code: "PS2", title: "Labor Conditions", status: "COMPLIANT" },
-  { code: "PS3", title: "Resource Efficiency", status: "WARNING" },
-  { code: "PS4", title: "Community Health", status: "E-FLOW GAP" },
-  { code: "PS5", title: "Land Resettlement", status: "MAJOR BREACH" },
-  { code: "PS6", title: "Biodiversity", status: "PENDING" },
-  { code: "PS7", title: "Indigenous Peoples", status: "COMPLIANT" },
-  { code: "PS8", title: "Cultural Heritage", status: "COMPLIANT" },
-];
-
-function statusStyles(s: PS["status"]) {
-  switch (s) {
-    case "COMPLIANT":
-      return { card: "bg-mint-soft/40 border-mint/30", text: "text-mint", dot: "bg-mint" };
-    case "WARNING":
-      return {
-        card: "bg-amber-50 border-amber-200",
-        text: "text-amber-600",
-        dot: "bg-amber-500",
-      };
-    case "E-FLOW GAP":
-      return { card: "bg-rose-50 border-rose-200", text: "text-rose-600", dot: "bg-rose-500" };
-    case "MAJOR BREACH":
-      return {
-        card: "bg-rose-50 border-rose-300 ring-1 ring-rose-300",
-        text: "text-rose-600",
-        dot: "bg-rose-500",
-      };
-    case "PENDING":
-      return {
-        card: "bg-amber-50 border-amber-200",
-        text: "text-amber-600",
-        dot: "bg-amber-500",
-      };
-  }
+function statusStyles(status: string) {
+  const s = status?.toLowerCase() ?? "";
+  if (s === "compliant")
+    return { card: "bg-mint-soft/40 border-mint/30", text: "text-mint", dot: "bg-mint" };
+  if (s === "partial")
+    return { card: "bg-amber-50 border-amber-200", text: "text-amber-600", dot: "bg-amber-500" };
+  if (s === "non_compliant")
+    return { card: "bg-rose-50 border-rose-300 ring-1 ring-rose-300", text: "text-rose-600", dot: "bg-rose-500" };
+  // fallback / pending
+  return { card: "bg-amber-50 border-amber-200", text: "text-amber-600", dot: "bg-amber-500" };
 }
 
 function DashboardPage() {
   const [project, setProject] = useState<ProjectDraft | null>(null);
-  useEffect(() => setProject(loadProject()), []);
+  const [results, setResults] = useState<AuditResults | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const compliance = 42;
+  const PROJECT_ID = typeof window !== "undefined"
+  ? (localStorage.getItem("bridgehydro:project-id") ?? "")
+  : "";
+
+  useEffect(() => {
+    setProject(loadProject());
+    if (!PROJECT_ID) { setLoading(false); return; }
+    getAuditResults(PROJECT_ID)
+      .then(setResults)
+      .catch(() => {/* no results yet — stay null */})
+      .finally(() => setLoading(false));
+  }, [PROJECT_ID]);
+
+  const compliance = results?.overall_score ?? 0;
   const radius = 90;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (compliance / 100) * circumference;
+
+  const psScores = results?.ps_scores ?? [];
 
   return (
     <div className="min-h-screen bg-surface-soft flex">
@@ -225,16 +211,26 @@ function DashboardPage() {
               </div>
 
               <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-                {standards.map((s) => {
+                {loading && (
+                  <div className="col-span-4 text-center text-muted-foreground text-sm py-8">
+                    Loading results…
+                  </div>
+                )}
+                {!loading && psScores.length === 0 && (
+                  <div className="col-span-4 text-center text-muted-foreground text-sm py-8">
+                    No analysis yet. Upload a document and run a scan.
+                  </div>
+                )}
+                {psScores.map((s) => {
                   const st = statusStyles(s.status);
                   return (
-                    <div key={s.code} className={`rounded-2xl border p-4 ${st.card}`}>
+                    <div key={s.ps_number} className={`rounded-2xl border p-4 ${st.card}`}>
                       <div className="flex items-center justify-between">
-                        <span className="font-mono-label text-ink">{s.code}</span>
+                        <span className="font-mono-label text-ink">PS{s.ps_number}</span>
                         <span className={`h-2 w-2 rounded-full ${st.dot}`} />
                       </div>
                       <p className="mt-3 font-mono-label text-muted-foreground leading-tight">
-                        {s.title.toUpperCase()}
+                        {s.ps_name.toUpperCase()}
                       </p>
                       <p className={`mt-3 font-mono-label ${st.text}`}>{s.status}</p>
                     </div>
