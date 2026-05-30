@@ -36,3 +36,27 @@ export async function createProject(payload: {
   });
   return apiFetch(`/api/projects?${params.toString()}`, { method: "POST" });
 }
+
+export async function uploadDocument(
+  projectId: string,
+  file: File,
+  documentPhase: string,
+): Promise<{ status: string; chunks_stored?: number; pages_extracted?: number }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const params = new URLSearchParams({ document_phase: documentPhase });
+
+  const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+  const res = await fetch(
+    `${BASE_URL}/api/projects/${projectId}/upload?${params.toString()}`,
+    { method: "POST", body: formData },
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(text);
+  }
+
+  return res.json();
+}

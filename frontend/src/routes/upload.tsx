@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { loadProject, saveDocs, type ProjectDraft } from "@/lib/project-cache";
+import { uploadDocument } from "@/lib/api/projectApi";
 
 export const Route = createFileRoute("/upload")({
   head: () => ({
@@ -31,6 +32,7 @@ type FileItem = {
   size: number;
   progress: number;
   kind: "pdf" | "doc";
+  file?: File;
 };
 
 function UploadPage() {
@@ -41,19 +43,59 @@ function UploadPage() {
   ]);
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const handleAnalyze = () => {
-    saveDocs(
-      files.map((f) => ({
-        name: f.name,
-        size: f.size,
-        kind: f.kind,
-        verifiedBy: f.progress >= 100 ? "John Doe" : "System",
-        uploadedAt: new Date().toISOString(),
-      })),
-    );
-    navigate({ to: "/dashboard" });
+  const handleAnalyze = async () => {
+    const projectId =
+      typeof window !== "undefined"
+        ? (localStorage.getItem("bridgehydro:project-id") ?? "")
+        : "";
+
+    if (!projectId) {
+      setUploadError("No active project found. Please create a project first.");
+      return;
+    }
+
+    const pendingFiles = files.filter((f) => f.file);
+    if (pendingFiles.length === 0) {
+      navigate({ to: "/dashboard" });
+      return;
+    }
+
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      for (const fileItem of pendingFiles) {
+        setFiles((prev) =>
+          prev.map((f) => (f.id === fileItem.id ? { ...f, progress: 10 } : f)),
+        );
+
+        await uploadDocument(projectId, fileItem.file!, "eia");
+
+        setFiles((prev) =>
+          prev.map((f) => (f.id === fileItem.id ? { ...f, progress: 100 } : f)),
+        );
+      }
+
+      saveDocs(
+        files.map((f) => ({
+          name: f.name,
+          size: f.size,
+          kind: f.kind,
+          verifiedBy: "System",
+          uploadedAt: new Date().toISOString(),
+        })),
+      );
+
+      navigate({ to: "/dashboard" });
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   useEffect(() => {
@@ -82,6 +124,7 @@ function UploadPage() {
         size: f.size,
         progress: 0,
         kind: "pdf" as const,
+        file: f,
       }));
     setFiles((prev) => [...prev, ...next]);
   };
@@ -255,11 +298,15 @@ function UploadPage() {
                   Cloud server: hydro-node-nepal-01{" "}
                   <span className="font-mono-label text-mint">(Active)</span>
                 </div>
+                {uploadError && (
+                  <p className="text-sm text-rose-500 font-medium">{uploadError}</p>
+                )}
                 <button
                   onClick={handleAnalyze}
-                  className="inline-flex items-center gap-2 rounded-xl bg-ink px-6 py-3.5 text-sm font-medium text-white hover:bg-ink/90 transition shadow-lg shadow-ink/20"
+                  disabled={uploading}
+                  className="inline-flex items-center gap-2 rounded-xl bg-ink px-6 py-3.5 text-sm font-medium text-white hover:bg-ink/90 transition shadow-lg shadow-ink/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Analyze Compliance <Zap className="h-4 w-4 text-mint" />
+                  {uploading ? "Uploading…" : "Analyze Compliance"} <Zap className="h-4 w-4 text-mint" />
                 </button>
               </div>
             </div>
