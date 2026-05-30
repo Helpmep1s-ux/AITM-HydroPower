@@ -1,4 +1,5 @@
 from services.document_services import process_and_store_eia
+from core.database import supabase
 
 def run_pdf_worker(
     file_bytes: bytes,
@@ -6,6 +7,11 @@ def run_pdf_worker(
     project_id: str,
     document_phase: str
 ):
+    supabase.table("eia_chunks")\
+        .delete()\
+        .eq("project_id", project_id)\
+        .eq("document_phase", document_phase)\
+        .execute()
     """Entry point called by the FastAPI route."""
     try:
         result = process_and_store_eia(

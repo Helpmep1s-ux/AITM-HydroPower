@@ -5,6 +5,10 @@ from services.score_services import store_score, store_flags
 def run_scoring_worker(project_id: str):
     """Score EIA against all IFC Performance Standards."""
     
+    # Clear previous results before re-scoring
+    supabase.table("scores").delete().eq("project_id", project_id).execute()
+    supabase.table("flags").delete().eq("project_id", project_id).execute()
+    
     # Get all IFC standards
     ifc_result = supabase.table("ifc_standards").select("*").execute()
     ifc_standards = ifc_result.data
