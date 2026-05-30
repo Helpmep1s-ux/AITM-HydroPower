@@ -60,3 +60,13 @@ export async function uploadDocument(
 
   return res.json();
 }
+
+export function saveActiveProjectId(id: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("bridgehydro:project-id", id);
+}
+
+export function getActiveProjectId(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("bridgehydro:project-id") ?? "";
+}

@@ -23,7 +23,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { loadProject, type ProjectDraft } from "@/lib/project-cache";
-import { getAuditResults, type AuditResults, type PSScore } from "@/lib/api/analysisApi";
+import { getAuditResults, triggerAnalysis, type AuditResults, type PSScore } from "@/lib/api/analysisApi";
 import { getProject } from "@/lib/api/projectApi";
 
 export const Route = createFileRoute("/dashboard")({
@@ -47,19 +47,45 @@ function DashboardPage() {
   const [project, setProject] = useState<ProjectDraft | null>(null);
   const [results, setResults] = useState<AuditResults | null>(null);
   const [loading, setLoading] = useState(true);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   const PROJECT_ID = typeof window !== "undefined"
   ? (localStorage.getItem("bridgehydro:project-id") ?? "")
   : "";
 
+  const fetchResults = async () => {
+    if (!PROJECT_ID) return;
+    try {
+      const data = await getAuditResults(PROJECT_ID);
+      setResults(data);
+    } catch {
+      // no results yet — stay null
+    }
+  };
+
   useEffect(() => {
     setProject(loadProject());
-    if (!PROJECT_ID) { setLoading(false); return; }
-    getAuditResults(PROJECT_ID)
-      .then(setResults)
-      .catch(() => {/* no results yet — stay null */})
-      .finally(() => setLoading(false));
+    setLoading(true);
+    fetchResults().finally(() => setLoading(false));
   }, [PROJECT_ID]);
+
+  const handleScan = async () => {
+    if (!PROJECT_ID) {
+      setScanError("No active project. Please create a project first.");
+      return;
+    }
+    setScanning(true);
+    setScanError(null);
+    try {
+      await triggerAnalysis(PROJECT_ID);
+      await fetchResults();
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : "Analysis failed.");
+    } finally {
+      setScanning(false);
+    }
+  };
 
   const compliance = results?.overall_score ?? 0;
   const radius = 90;
@@ -152,9 +178,18 @@ function DashboardPage() {
                 <button className="inline-flex items-center gap-2 rounded-xl bg-white border border-border px-5 py-3 text-sm font-medium text-ink hover:bg-surface-soft transition">
                   <Download className="h-4 w-4" /> Export PDF
                 </button>
-                <button className="inline-flex items-center gap-2 rounded-xl bg-ink px-5 py-3 text-sm font-medium text-white hover:bg-ink/90 transition shadow-lg shadow-ink/20">
-                  Initiate Deep Scan <Zap className="h-4 w-4 text-mint" />
-                </button>
+                <div className="flex flex-col items-end gap-2">
+                  {scanError && (
+                    <p className="text-sm text-rose-500 font-medium">{scanError}</p>
+                  )}
+                  <button
+                    onClick={handleScan}
+                    disabled={scanning}
+                    className="inline-flex items-center gap-2 rounded-xl bg-ink px-5 py-3 text-sm font-medium text-white hover:bg-ink/90 transition shadow-lg shadow-ink/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {scanning ? "Analysing…" : "Initiate Deep Scan"} <Zap className="h-4 w-4 text-mint" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -37,7 +37,7 @@ def run_scoring_worker(project_id: str):
         ps_content = " ".join(ps_data["content_chunks"])
         
         # Get embedding of PS content to find relevant EIA chunks
-        from backend.services.storage_services import get_embedding
+        from services.storage_services import get_embedding
         ps_embedding = get_embedding(ps_content)
         
         # Query most relevant EIA chunks
